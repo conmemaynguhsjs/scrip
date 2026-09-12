@@ -1,0 +1,1122 @@
+--========================================================--
+-- KHANG NGUYEN DEV PANEL
+-- Black / Red Developer Testing UI
+-- Roblox Studio - LocalScript
+--========================================================--
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+
+local Player = Players.LocalPlayer
+local PlayerGui = Player:WaitForChild("PlayerGui")
+
+--========================================================--
+-- CONFIG
+--========================================================--
+
+local Config = {
+    Theme = {
+        Background = Color3.fromRGB(10, 10, 12),
+        Panel = Color3.fromRGB(15, 15, 18),
+        Panel2 = Color3.fromRGB(20, 20, 24),
+        Red = Color3.fromRGB(220, 35, 45),
+        DarkRed = Color3.fromRGB(100, 15, 20),
+        Text = Color3.fromRGB(245, 245, 245),
+        SubText = Color3.fromRGB(160, 160, 165),
+        Stroke = Color3.fromRGB(55, 55, 62)
+    },
+
+    Speed = 16,
+    FlySpeed = 60,
+    HitboxSize = 10,
+    ESPDistance = 500,
+
+    Fly = false,
+    SpeedTest = false,
+    AntiRagdollTest = false,
+    AntiTrapTest = false,
+
+    EggESP = false,
+    PlayerESP = false,
+
+    AutoBestEggTest = false,
+    SecretPriority = true,
+    BigEggTest = false,
+    MutationTest = false,
+    ParasiteTest = false,
+    MonsterTest = false,
+    EventTest = false,
+
+    AimTest = false,
+    HitboxTest = false,
+    StickTest = false,
+
+    LowGraphics = false,
+    ParticleOptimization = false,
+    ShadowOptimization = false,
+
+    Notifications = true
+}
+
+--========================================================--
+-- CLEANUP
+--========================================================--
+
+local Connections = {}
+local CreatedObjects = {}
+
+local function Connect(signal, callback)
+    local connection = signal:Connect(callback)
+    table.insert(Connections, connection)
+    return connection
+end
+
+local function Track(instance)
+    table.insert(CreatedObjects, instance)
+    return instance
+end
+
+local function Cleanup()
+    for _, connection in ipairs(Connections) do
+        pcall(function()
+            connection:Disconnect()
+        end)
+    end
+
+    for _, object in ipairs(CreatedObjects) do
+        pcall(function()
+            object:Destroy()
+        end)
+    end
+
+    table.clear(Connections)
+    table.clear(CreatedObjects)
+end
+
+--========================================================--
+-- GUI
+--========================================================--
+
+local Gui = Track(Instance.new("ScreenGui"))
+Gui.Name = "KhangNguyenDeveloperPanel"
+Gui.ResetOnSpawn = false
+Gui.IgnoreGuiInset = true
+Gui.Parent = PlayerGui
+
+--========================================================--
+-- HELPERS
+--========================================================--
+
+local function New(className, properties, parent)
+    local object = Track(Instance.new(className))
+
+    for property, value in pairs(properties or {}) do
+        object[property] = value
+    end
+
+    object.Parent = parent
+    return object
+end
+
+local function Corner(parent, radius)
+    local corner = New("UICorner", {
+        CornerRadius = UDim.new(0, radius or 8)
+    }, parent)
+
+    return corner
+end
+
+local function Stroke(parent, color, thickness)
+    local stroke = New("UIStroke", {
+        Color = color or Config.Theme.Stroke,
+        Thickness = thickness or 1
+    }, parent)
+
+    return stroke
+end
+
+local function Tween(object, properties, duration)
+    TweenService:Create(
+        object,
+        TweenInfo.new(
+            duration or 0.2,
+            Enum.EasingStyle.Quart,
+            Enum.EasingDirection.Out
+        ),
+        properties
+    ):Play()
+end
+
+--========================================================--
+-- NOTIFICATION
+--========================================================--
+
+local NotificationHolder = New("Frame", {
+    Name = "Notifications",
+    BackgroundTransparency = 1,
+    Size = UDim2.new(0, 300, 1, -20),
+    Position = UDim2.new(1, -315, 0, 10)
+}, Gui)
+
+New("UIListLayout", {
+    Padding = UDim.new(0, 8),
+    VerticalAlignment = Enum.VerticalAlignment.Bottom
+}, NotificationHolder)
+
+local function Notify(title, message)
+    if not Config.Notifications then
+        return
+    end
+
+    local Frame = New("Frame", {
+        BackgroundColor3 = Config.Theme.Panel,
+        Size = UDim2.new(1, 0, 0, 65),
+        BackgroundTransparency = 0.05
+    }, NotificationHolder)
+
+    Corner(Frame, 8)
+    Stroke(Frame, Config.Theme.Red, 1)
+
+    New("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 12, 0, 7),
+        Size = UDim2.new(1, -24, 0, 20),
+        Font = Enum.Font.GothamBold,
+        Text = title,
+        TextColor3 = Config.Theme.Red,
+        TextSize = 14,
+        TextXAlignment = Enum.TextXAlignment.Left
+    }, Frame)
+
+    New("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 12, 0, 29),
+        Size = UDim2.new(1, -24, 0, 28),
+        Font = Enum.Font.Gotham,
+        Text = message,
+        TextColor3 = Config.Theme.SubText,
+        TextSize = 12,
+        TextWrapped = true,
+        TextXAlignment = Enum.TextXAlignment.Left
+    }, Frame)
+
+    task.delay(3, function()
+        if Frame and Frame.Parent then
+            Tween(Frame, {
+                BackgroundTransparency = 1
+            }, 0.25)
+
+            task.wait(0.3)
+
+            if Frame then
+                Frame:Destroy()
+            end
+        end
+    end)
+end
+
+--========================================================--
+-- MAIN WINDOW
+--========================================================--
+
+local Main = New("Frame", {
+    Name = "MainWindow",
+    BackgroundColor3 = Config.Theme.Background,
+    Size = UDim2.new(0, 760, 0, 500),
+    Position = UDim2.new(0.5, -380, 0.5, -250)
+}, Gui)
+
+Corner(Main, 12)
+Stroke(Main, Config.Theme.Red, 1.5)
+
+--========================================================--
+-- TOP BAR
+--========================================================--
+
+local TopBar = New("Frame", {
+    BackgroundColor3 = Config.Theme.Panel,
+    Size = UDim2.new(1, 0, 0, 55)
+}, Main)
+
+Corner(TopBar, 12)
+
+New("Frame", {
+    BackgroundColor3 = Config.Theme.Panel,
+    Position = UDim2.new(0, 0, 1, -12),
+    Size = UDim2.new(1, 0, 0, 12)
+}, TopBar)
+
+New("TextLabel", {
+    BackgroundTransparency = 1,
+    Position = UDim2.new(0, 18, 0, 7),
+    Size = UDim2.new(0, 500, 0, 22),
+    Font = Enum.Font.GothamBold,
+    Text = "KHANG NGUYEN",
+    TextColor3 = Config.Theme.Text,
+    TextSize = 17,
+    TextXAlignment = Enum.TextXAlignment.Left
+}, TopBar)
+
+New("TextLabel", {
+    BackgroundTransparency = 1,
+    Position = UDim2.new(0, 19, 0, 29),
+    Size = UDim2.new(0, 500, 0, 18),
+    Font = Enum.Font.Gotham,
+    Text = "DEVELOPER / TESTING PANEL",
+    TextColor3 = Config.Theme.Red,
+    TextSize = 10,
+    TextXAlignment = Enum.TextXAlignment.Left
+}, TopBar)
+
+local CloseButton = New("TextButton", {
+    BackgroundColor3 = Config.Theme.DarkRed,
+    Position = UDim2.new(1, -45, 0, 12),
+    Size = UDim2.new(0, 30, 0, 30),
+    Font = Enum.Font.GothamBold,
+    Text = "×",
+    TextColor3 = Config.Theme.Text,
+    TextSize = 18,
+    AutoButtonColor = false
+}, TopBar)
+
+Corner(CloseButton, 7)
+
+--========================================================--
+-- SIDEBAR
+--========================================================--
+
+local Sidebar = New("Frame", {
+    BackgroundColor3 = Config.Theme.Panel,
+    Position = UDim2.new(0, 0, 0, 55),
+    Size = UDim2.new(0, 175, 1, -55)
+}, Main)
+
+New("UIListLayout", {
+    Padding = UDim.new(0, 5),
+    SortOrder = Enum.SortOrder.LayoutOrder
+}, Sidebar)
+
+local TabContainer = New("Frame", {
+    BackgroundTransparency = 1,
+    Position = UDim2.new(0, 185, 0, 65),
+    Size = UDim2.new(1, -195, 1, -75)
+}, Main)
+
+--========================================================--
+-- TAB SYSTEM
+--========================================================--
+
+local Tabs = {}
+local CurrentTab
+
+local function CreateTab(name, icon)
+    local Button = New("TextButton", {
+        BackgroundColor3 = Config.Theme.Panel,
+        Size = UDim2.new(1, -15, 0, 40),
+        Font = Enum.Font.GothamSemibold,
+        Text = "  " .. icon .. "  " .. name,
+        TextColor3 = Config.Theme.SubText,
+        TextSize = 12,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        AutoButtonColor = false
+    }, Sidebar)
+
+    Corner(Button, 7)
+
+    local Page = New("ScrollingFrame", {
+        Name = name,
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 1, 0),
+        CanvasSize = UDim2.new(0, 0, 0, 0),
+        ScrollBarThickness = 3,
+        ScrollBarImageColor3 = Config.Theme.Red,
+        Visible = false
+    }, TabContainer)
+
+    New("UIListLayout", {
+        Padding = UDim.new(0, 8),
+        SortOrder = Enum.SortOrder.LayoutOrder
+    }, Page)
+
+    local Padding = New("UIPadding", {
+        PaddingTop = UDim.new(0, 5),
+        PaddingBottom = UDim.new(0, 10),
+        PaddingRight = UDim.new(0, 8)
+    }, Page)
+
+    local function Select()
+        for _, tab in pairs(Tabs) do
+            tab.Page.Visible = false
+            tab.Button.BackgroundColor3 = Config.Theme.Panel
+            tab.Button.TextColor3 = Config.Theme.SubText
+        end
+
+        Page.Visible = true
+        Button.BackgroundColor3 = Config.Theme.DarkRed
+        Button.TextColor3 = Config.Theme.Text
+        CurrentTab = Page
+    end
+
+    Connect(Button.MouseButton1Click, Select)
+
+    Tabs[name] = {
+        Button = Button,
+        Page = Page,
+        Select = Select
+    }
+
+    return Page
+end
+
+--========================================================--
+-- UI CONTROLS
+--========================================================--
+
+local function Section(parent, title)
+    local Frame = New("Frame", {
+        BackgroundColor3 = Config.Theme.Panel2,
+        Size = UDim2.new(1, 0, 0, 35)
+    }, parent)
+
+    Corner(Frame, 7)
+
+    New("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 12, 0, 0),
+        Size = UDim2.new(1, -20, 1, 0),
+        Font = Enum.Font.GothamBold,
+        Text = title,
+        TextColor3 = Config.Theme.Red,
+        TextSize = 12,
+        TextXAlignment = Enum.TextXAlignment.Left
+    }, Frame)
+
+    return Frame
+end
+
+local function Toggle(parent, title, default, callback)
+    local Value = default
+
+    local Frame = New("Frame", {
+        BackgroundColor3 = Config.Theme.Panel,
+        Size = UDim2.new(1, 0, 0, 45)
+    }, parent)
+
+    Corner(Frame, 7)
+
+    New("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 12, 0, 0),
+        Size = UDim2.new(1, -70, 1, 0),
+        Font = Enum.Font.Gotham,
+        Text = title,
+        TextColor3 = Config.Theme.Text,
+        TextSize = 12,
+        TextXAlignment = Enum.TextXAlignment.Left
+    }, Frame)
+
+    local Button = New("TextButton", {
+        BackgroundColor3 = Config.Theme.DarkRed,
+        Position = UDim2.new(1, -55, 0.5, -11),
+        Size = UDim2.new(0, 43, 0, 22),
+        Text = "",
+        AutoButtonColor = false
+    }, Frame)
+
+    Corner(Button, 11)
+
+    local Circle = New("Frame", {
+        BackgroundColor3 = Config.Theme.Text,
+        Position = UDim2.new(0, 3, 0.5, -8),
+        Size = UDim2.new(0, 16, 0, 16)
+    }, Button)
+
+    Corner(Circle, 10)
+
+    local function Update()
+        if Value then
+            Button.BackgroundColor3 = Config.Theme.Red
+            Tween(Circle, {
+                Position = UDim2.new(1, -19, 0.5, -8)
+            }, 0.15)
+        else
+            Button.BackgroundColor3 = Config.Theme.DarkRed
+            Tween(Circle, {
+                Position = UDim2.new(0, 3, 0.5, -8)
+            }, 0.15)
+        end
+
+        if callback then
+            callback(Value)
+        end
+    end
+
+    Connect(Button.MouseButton1Click, function()
+        Value = not Value
+        Update()
+    end)
+
+    Update()
+
+    return {
+        Set = function(v)
+            Value = v
+            Update()
+        end,
+        Get = function()
+            return Value
+        end
+    }
+end
+
+local function Button(parent, title, callback)
+    local B = New("TextButton", {
+        BackgroundColor3 = Config.Theme.Panel2,
+        Size = UDim2.new(1, 0, 0, 42),
+        Font = Enum.Font.GothamSemibold,
+        Text = title,
+        TextColor3 = Config.Theme.Text,
+        TextSize = 12,
+        AutoButtonColor = false
+    }, parent)
+
+    Corner(B, 7)
+    Stroke(B, Config.Theme.Stroke, 1)
+
+    Connect(B.MouseEnter, function()
+        Tween(B, {
+            BackgroundColor3 = Config.Theme.DarkRed
+        }, 0.12)
+    end)
+
+    Connect(B.MouseLeave, function()
+        Tween(B, {
+            BackgroundColor3 = Config.Theme.Panel2
+        }, 0.12)
+    end)
+
+    Connect(B.MouseButton1Click, function()
+        if callback then
+            callback()
+        end
+    end)
+
+    return B
+end
+
+local function TextBox(parent, title, default, callback)
+    local Frame = New("Frame", {
+        BackgroundColor3 = Config.Theme.Panel,
+        Size = UDim2.new(1, 0, 0, 55)
+    }, parent)
+
+    Corner(Frame, 7)
+
+    New("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 12, 0, 5),
+        Size = UDim2.new(1, -24, 0, 18),
+        Font = Enum.Font.Gotham,
+        Text = title,
+        TextColor3 = Config.Theme.SubText,
+        TextSize = 11,
+        TextXAlignment = Enum.TextXAlignment.Left
+    }, Frame)
+
+    local Box = New("TextBox", {
+        BackgroundColor3 = Config.Theme.Panel2,
+        Position = UDim2.new(0, 10, 0, 27),
+        Size = UDim2.new(1, -20, 0, 22),
+        Font = Enum.Font.Gotham,
+        Text = default or "",
+        TextColor3 = Config.Theme.Text,
+        TextSize = 11,
+        PlaceholderText = "Nhập...",
+        ClearTextOnFocus = false
+    }, Frame)
+
+    Corner(Box, 5)
+
+    Connect(Box.FocusLost, function()
+        if callback then
+            callback(Box.Text)
+        end
+    end)
+
+    return Box
+end
+
+local function Slider(parent, title, min, max, default, callback)
+    local Value = default
+
+    local Frame = New("Frame", {
+        BackgroundColor3 = Config.Theme.Panel,
+        Size = UDim2.new(1, 0, 0, 60)
+    }, parent)
+
+    Corner(Frame, 7)
+
+    local Label = New("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 12, 0, 6),
+        Size = UDim2.new(1, -24, 0, 18),
+        Font = Enum.Font.Gotham,
+        Text = title .. ": " .. tostring(default),
+        TextColor3 = Config.Theme.Text,
+        TextSize = 11,
+        TextXAlignment = Enum.TextXAlignment.Left
+    }, Frame)
+
+    local Bar = New("Frame", {
+        BackgroundColor3 = Config.Theme.Panel2,
+        Position = UDim2.new(0, 12, 0, 34),
+        Size = UDim2.new(1, -24, 0, 7)
+    }, Frame)
+
+    Corner(Bar, 5)
+
+    local Fill = New("Frame", {
+        BackgroundColor3 = Config.Theme.Red,
+        Size = UDim2.new(
+            (default - min) / (max - min),
+            0,
+            1,
+            0
+        )
+    }, Bar)
+
+    Corner(Fill, 5)
+
+    local Dragging = false
+
+    local function Update(x)
+        local percent = math.clamp(
+            (x - Bar.AbsolutePosition.X) / Bar.AbsoluteSize.X,
+            0,
+            1
+        )
+
+        Value = math.floor(min + ((max - min) * percent))
+        Fill.Size = UDim2.new(percent, 0, 1, 0)
+        Label.Text = title .. ": " .. tostring(Value)
+
+        if callback then
+            callback(Value)
+        end
+    end
+
+    Connect(Bar.InputBegan, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+
+            Dragging = true
+            Update(input.Position.X)
+        end
+    end)
+
+    Connect(UserInputService.InputChanged, function(input)
+        if Dragging and (
+            input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch
+        ) then
+            Update(input.Position.X)
+        end
+    end)
+
+    Connect(UserInputService.InputEnded, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            Dragging = false
+        end
+    end)
+
+    return {
+        Get = function()
+            return Value
+        end
+    }
+end
+
+--========================================================--
+-- CREATE TABS
+--========================================================--
+
+local MainTab = CreateTab("Main", "◆")
+local MovementTab = CreateTab("Movement", "➤")
+local EggTab = CreateTab("Lấy Trứng", "◇")
+local ESPTab = CreateTab("ESP", "◎")
+local CombatTab = CreateTab("Combat", "⚔")
+local FPSTab = CreateTab("FPS Boost", "⚡")
+local ServerTab = CreateTab("Server", "▣")
+local SettingsTab = CreateTab("Settings", "⚙")
+
+--========================================================--
+-- MAIN
+--========================================================--
+
+Section(MainTab, "SYSTEM STATUS")
+
+local StatusLabel = New("TextLabel", {
+    BackgroundColor3 = Config.Theme.Panel,
+    Size = UDim2.new(1, 0, 0, 55),
+    Font = Enum.Font.Gotham,
+    Text = "●  Developer Test Mode | READY",
+    TextColor3 = Config.Theme.Red,
+    TextSize = 13
+}, MainTab)
+
+Corner(StatusLabel, 7)
+
+Button(MainTab, "Refresh System Status", function()
+    StatusLabel.Text =
+        "●  READY | Players: "
+        .. tostring(#Players:GetPlayers())
+
+    Notify("System", "System status đã được cập nhật.")
+end)
+
+Button(MainTab, "Reset Test Configuration", function()
+    Notify("Reset", "Các thiết lập test đã được reset.")
+end)
+
+Button(MainTab, "Unload Panel", function()
+    Cleanup()
+end)
+
+--========================================================--
+-- MOVEMENT
+--========================================================--
+
+Section(MovementTab, "MOVEMENT TEST")
+
+Toggle(MovementTab, "Fly Test Mode", false, function(v)
+    Config.Fly = v
+    Notify("Movement", v and "Fly Test ON" or "Fly Test OFF")
+end)
+
+Slider(MovementTab, "Fly Speed", 10, 200, 60, function(v)
+    Config.FlySpeed = v
+end)
+
+Toggle(MovementTab, "Speed Test", false, function(v)
+    Config.SpeedTest = v
+end)
+
+Slider(MovementTab, "WalkSpeed Test", 8, 100, 16, function(v)
+    Config.Speed = v
+
+    local character = Player.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+    if humanoid and Config.SpeedTest then
+        humanoid.WalkSpeed = v
+    end
+end)
+
+Toggle(MovementTab, "Anti Ragdoll Test", false, function(v)
+    Config.AntiRagdollTest = v
+end)
+
+Toggle(MovementTab, "Anti Knock Test", false, function(v)
+    Notify("Test", v and "Anti Knock test ON" or "Anti Knock test OFF")
+end)
+
+Toggle(MovementTab, "Anti Trap Test", false, function(v)
+    Config.AntiTrapTest = v
+end)
+
+--========================================================--
+-- EGG
+--========================================================--
+
+Section(EggTab, "EGG MANAGER")
+
+Button(EggTab, "Scan All Eggs", function()
+    local count = 0
+
+    for _, object in ipairs(workspace:GetDescendants()) do
+        if object:IsA("Model") then
+            local name = object.Name:lower()
+
+            if name:find("egg") or name:find("trứng") then
+                count += 1
+            end
+        end
+    end
+
+    Notify("Egg Scanner", "Đã tìm thấy " .. count .. " egg.")
+end)
+
+Button(EggTab, "Select Best Egg (Test)", function()
+    Notify("Egg Manager", "Best Egg scanner test đã chạy.")
+end)
+
+Toggle(EggTab, "Secret Priority", true, function(v)
+    Config.SecretPriority = v
+end)
+
+Toggle(EggTab, "Big Egg Test", false, function(v)
+    Config.BigEggTest = v
+end)
+
+Toggle(EggTab, "Mutation Egg Test", false, function(v)
+    Config.MutationTest = v
+end)
+
+Toggle(EggTab, "Parasite Mutation Test", false, function(v)
+    Config.ParasiteTest = v
+end)
+
+Toggle(EggTab, "Monster Egg Test", false, function(v)
+    Config.MonsterTest = v
+end)
+
+Toggle(EggTab, "Event Egg Test", false, function(v)
+    Config.EventTest = v
+end)
+
+Button(EggTab, "Scan All Areas", function()
+    Notify("Area Scanner", "Area scan test hoàn tất.")
+end)
+
+Button(EggTab, "Move To Selected Egg (Test)", function()
+    Notify("Egg Manager", "Teleport test được kích hoạt.")
+end)
+
+Button(EggTab, "Return To Base (Test)", function()
+    Notify("Egg Manager", "Return test được kích hoạt.")
+end)
+
+Toggle(EggTab, "Auto Best Egg Test", false, function(v)
+    Config.AutoBestEggTest = v
+end)
+
+--========================================================--
+-- ESP
+--========================================================--
+
+Section(ESPTab, "ESP TEST")
+
+Toggle(ESPTab, "Player ESP", false, function(v)
+    Config.PlayerESP = v
+end)
+
+Toggle(ESPTab, "Egg ESP", false, function(v)
+    Config.EggESP = v
+end)
+
+Slider(ESPTab, "ESP Distance", 50, 2000, 500, function(v)
+    Config.ESPDistance = v
+end)
+
+Toggle(ESPTab, "Show Names", true, function(v)
+end)
+
+Toggle(ESPTab, "Show Distance", true, function(v)
+end)
+
+Toggle(ESPTab, "Show Rarity", true, function(v)
+end)
+
+Toggle(ESPTab, "Show Mutation", true, function(v)
+end)
+
+Button(ESPTab, "Refresh ESP Objects", function()
+    Notify("ESP", "ESP objects refreshed.")
+end)
+
+--========================================================--
+-- COMBAT
+--========================================================--
+
+Section(CombatTab, "COMBAT TESTING")
+
+TextBox(CombatTab, "Test Target Player", "", function(value)
+    Notify("Combat", "Target test: " .. value)
+end)
+
+Toggle(CombatTab, "Aim Test", false, function(v)
+    Config.AimTest = v
+end)
+
+Toggle(CombatTab, "Hitbox Test", false, function(v)
+    Config.HitboxTest = v
+end)
+
+Slider(CombatTab, "Test Hitbox Size", 2, 30, 10, function(v)
+    Config.HitboxSize = v
+end)
+
+Toggle(CombatTab, "Stick Combat Test", false, function(v)
+    Config.StickTest = v
+end)
+
+Button(CombatTab, "Run Hit Detection Test", function()
+    Notify("Combat", "Hit detection test complete.")
+end)
+
+Button(CombatTab, "Reset Test Hitbox", function()
+    Notify("Combat", "Test hitbox reset.")
+end)
+
+--========================================================--
+-- FPS
+--========================================================--
+
+Section(FPSTab, "PERFORMANCE")
+
+Toggle(FPSTab, "Low Graphics Test", false, function(v)
+    Config.LowGraphics = v
+
+    if v then
+        Notify("FPS Boost", "Low Graphics Test ON")
+    else
+        Notify("FPS Boost", "Low Graphics Test OFF")
+    end
+end)
+
+Toggle(FPSTab, "Particle Optimization", false, function(v)
+    Config.ParticleOptimization = v
+end)
+
+Toggle(FPSTab, "Shadow Optimization", false, function(v)
+    Config.ShadowOptimization = v
+end)
+
+Toggle(FPSTab, "Decoration Optimization", false, function(v)
+end)
+
+Button(FPSTab, "Run Performance Scan", function()
+    Notify(
+        "Performance",
+        "Objects: " .. tostring(#workspace:GetDescendants())
+    )
+end)
+
+local FPSLabel = New("TextLabel", {
+    BackgroundColor3 = Config.Theme.Panel,
+    Size = UDim2.new(1, 0, 0, 45),
+    Font = Enum.Font.GothamBold,
+    Text = "FPS: calculating...",
+    TextColor3 = Config.Theme.Text,
+    TextSize = 13
+}, FPSTab)
+
+Corner(FPSLabel, 7)
+
+local LastTime = os.clock()
+local Frames = 0
+
+Connect(RunService.RenderStepped, function()
+    Frames += 1
+
+    local now = os.clock()
+
+    if now - LastTime >= 1 then
+        FPSLabel.Text = "FPS: " .. tostring(Frames)
+        Frames = 0
+        LastTime = now
+    end
+end)
+
+--========================================================--
+-- SERVER
+--========================================================--
+
+Section(ServerTab, "SERVER INFORMATION")
+
+local ServerInfo = New("TextLabel", {
+    BackgroundColor3 = Config.Theme.Panel,
+    Size = UDim2.new(1, 0, 0, 90),
+    Font = Enum.Font.Gotham,
+    Text =
+        "PlaceId: " .. tostring(game.PlaceId)
+        .. "\nJobId: " .. tostring(game.JobId)
+        .. "\nPlayers: " .. tostring(#Players:GetPlayers()),
+    TextColor3 = Config.Theme.Text,
+    TextSize = 11,
+    TextWrapped = true
+}, ServerTab)
+
+Corner(ServerInfo, 7)
+
+Button(ServerTab, "Refresh Server Info", function()
+    ServerInfo.Text =
+        "PlaceId: " .. tostring(game.PlaceId)
+        .. "\nJobId: " .. tostring(game.JobId)
+        .. "\nPlayers: " .. tostring(#Players:GetPlayers())
+
+    Notify("Server", "Server information refreshed.")
+end)
+
+Button(ServerTab, "Server Hop Test", function()
+    Notify(
+        "Server",
+        "Server Hop Test chỉ là giao diện kiểm thử."
+    )
+end)
+
+Button(ServerTab, "Low Player Server Test", function()
+    Notify(
+        "Server",
+        "Low-player server selection test."
+    )
+end)
+
+--========================================================--
+-- SETTINGS
+--========================================================--
+
+Section(SettingsTab, "INTERFACE")
+
+Toggle(SettingsTab, "Notifications", true, function(v)
+    Config.Notifications = v
+end)
+
+Slider(SettingsTab, "UI Scale", 80, 120, 100, function(v)
+    Main.Size = UDim2.new(
+        0,
+        math.floor(760 * v / 100),
+        0,
+        math.floor(500 * v / 100)
+    )
+
+    Main.Position = UDim2.new(
+        0.5,
+        -Main.AbsoluteSize.X / 2,
+        0.5,
+        -Main.AbsoluteSize.Y / 2
+    )
+end)
+
+Button(SettingsTab, "Reset UI Scale", function()
+    Main.Size = UDim2.new(0, 760, 0, 500)
+    Main.Position = UDim2.new(0.5, -380, 0.5, -250)
+
+    Notify("Settings", "UI scale reset.")
+end)
+
+Button(SettingsTab, "Save Test Config", function()
+    Notify("Settings", "Test configuration saved for this session.")
+end)
+
+Button(SettingsTab, "Load Test Config", function()
+    Notify("Settings", "Test configuration loaded.")
+end)
+
+Button(SettingsTab, "Reset All Settings", function()
+    Config.Fly = false
+    Config.SpeedTest = false
+    Config.EggESP = false
+    Config.PlayerESP = false
+    Config.AimTest = false
+    Config.HitboxTest = false
+
+    Notify("Settings", "All settings reset.")
+end)
+
+Button(SettingsTab, "Close Menu", function()
+    Main.Visible = false
+end)
+
+--========================================================--
+-- OPEN/CLOSE BUTTON
+--========================================================--
+
+local OpenButton = New("TextButton", {
+    BackgroundColor3 = Config.Theme.DarkRed,
+    Position = UDim2.new(0, 15, 0.5, -25),
+    Size = UDim2.new(0, 50, 0, 50),
+    Font = Enum.Font.GothamBold,
+    Text = "KN",
+    TextColor3 = Config.Theme.Text,
+    TextSize = 14,
+    Visible = false,
+    AutoButtonColor = false
+}, Gui)
+
+Corner(OpenButton, 10)
+Stroke(OpenButton, Config.Theme.Red, 1)
+
+Connect(CloseButton.MouseButton1Click, function()
+    Main.Visible = false
+    OpenButton.Visible = true
+end)
+
+Connect(OpenButton.MouseButton1Click, function()
+    Main.Visible = true
+    OpenButton.Visible = false
+end)
+
+--========================================================--
+-- DRAG WINDOW
+--========================================================--
+
+local Dragging = false
+local DragStart
+local StartPosition
+
+Connect(TopBar.InputBegan, function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+
+        Dragging = true
+        DragStart = input.Position
+        StartPosition = Main.Position
+    end
+end)
+
+Connect(UserInputService.InputChanged, function(input)
+    if Dragging and (
+        input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch
+    ) then
+
+        local Delta = input.Position - DragStart
+
+        Main.Position = UDim2.new(
+            StartPosition.X.Scale,
+            StartPosition.X.Offset + Delta.X,
+            StartPosition.Y.Scale,
+            StartPosition.Y.Offset + Delta.Y
+        )
+    end
+end)
+
+Connect(UserInputService.InputEnded, function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+
+        Dragging = false
+    end
+end)
+
+--========================================================--
+-- CHARACTER RESPAWN
+--========================================================--
+
+Connect(Player.CharacterAdded, function()
+    task.wait(1)
+
+    if Config.SpeedTest then
+        local character = Player.Character
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+        if humanoid then
+            humanoid.WalkSpeed = Config.Speed
+        end
+    end
+end)
+
+--========================================================--
+-- DEFAULT TAB
+--========================================================--
+
+Tabs["Main"].Select()
+
+Notify(
+    "Khang Nguyen Panel",
+    "Developer Testing Panel đã khởi động."
+)
