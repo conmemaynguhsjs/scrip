@@ -1,0 +1,670 @@
+--// CONFIGURATION & STATE
+local CONFIG = {
+    Name = "KhangNguyenHub",
+    Version = "2.5.0",
+    Theme = {
+        Background = Color3.fromRGB(20, 20, 24),
+        Panel = Color3.fromRGB(28, 28, 35),
+        Red = Color3.fromRGB(220, 50, 50),
+        Gold = Color3.fromRGB(255, 200, 50),
+        Gray = Color3.fromRGB(160, 160, 175),
+        White = Color3.fromRGB(255, 255, 255),
+        Green = Color3.fromRGB(50, 220, 100),
+    },
+    Movement = {
+        MaxWalkSpeed = 300,
+        MinFlySpeed = 10,
+        MaxFlySpeed = 500,
+    },
+    GameSpecific = {
+        ValidAreas = {"Area 1", "Area 2", "Area 3", "Area 4 (Parasite/Huge)"},
+        ValidMutations = {"None", "Golden", "Rainbow", "Parasite/Mutated"},
+        ValidEggTypes = {"Normal", "Huge", "Secret Special"},
+    }
+}
+
+local STATE = {
+    Initialized = false,
+    Destroyed = false,
+    WalkSpeedValue = 16,
+    FlySpeedValue = 50,
+    FlyEnabled = false,
+    InfJumpEnabled = false,
+    CurrentArea = "Area 1",
+    SelectedRarity = "Common",
+    SelectedMutation = "None",
+    TargetEggType = "Normal",
+    AutoStealRunning = false,
+    AutoHatchRunning = false,
+    HitPlayerRunning = false,
+    SelectedTargetPlayer = nil,
+    FixLagEnabled = false,
+    WhitelistPlayers = {},
+    Logs = {},
+    RequestsCount = 0,
+    AcceptedCount = 0,
+    RejectedCount = 0,
+    ErrorsCount = 0,
+}
+
+--// SERVICES
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local Lighting = game:GetService("Lighting")
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+local UI = {
+    Gui = nil,
+    Main = nil,
+    FloatingIcon = nil,
+    Content = nil,
+    Buttons = {},
+    Pages = {},
+    StatusLabel = nil,
+    StatsLabel = nil,
+}
+
+local CONNECTIONS = {}
+local FlyBodyVelocity, FlyBodyGyro
+
+--// UTILITIES
+local function make(className, properties, parent)
+    local instance = Instance.new(className)
+    for k, v in pairs(properties) do
+        instance[k] = v
+    end
+    if parent then
+        instance.Parent = parent
+    end
+    return instance
+end
+
+local function corner(parent, radius)
+    return make("UICorner", { CornerRadius = UDim.new(0, radius) }, parent)
+end
+
+local function stroke(parent, color, thickness)
+    return make("UIStroke", { Color = color, Thickness = thickness or 1 }, parent)
+end
+
+local function label(parent, text, size, color)
+    return make("TextLabel", {
+        BackgroundTransparency = 1,
+        Text = text,
+        TextColor3 = color or CONFIG.Theme.White,
+        Font = Enum.Font.GothamMedium,
+        TextSize = size or 14,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, parent)
+end
+
+local function pushLog(level, message)
+    table.insert(STATE.Logs, {
+        Time = os.date("%H:%M:%S"),
+        Level = level,
+        Message = message
+    })
+    if #STATE.Logs > 100 then table.remove(STATE.Logs, 1) end
+end
+
+local function setStatus(statusType, text)
+    if not UI.StatusLabel then return end
+    if statusType == "READY" then
+        UI.StatusLabel.TextColor3 = CONFIG.Theme.Green
+        UI.StatusLabel.Text = "● READY: " .. text
+    elseif statusType == "BLOCKED" then
+        UI.StatusLabel.TextColor3 = CONFIG.Theme.Gold
+        UI.StatusLabel.Text = "● BLOCKED: " .. text
+    elseif statusType == "ERROR" then
+        UI.StatusLabel.TextColor3 = CONFIG.Theme.Red
+        UI.StatusLabel.Text = "● ERROR: " .. text
+    end
+end
+
+--// MOVEMENT & FIX RUBBERBANDING
+local Movement = {
+    Reset = function()
+        STATE.WalkSpeedValue = 16
+        local char = LocalPlayer.Character
+        if char and char:FindFirstChildOfClass("Humanoid") then
+            char:FindFirstChildOfClass("Humanoid").WalkSpeed = 16
+        end
+        pushLog("INFO", "Movement reset to default")
+    end,
+    ApplyWalkSpeed = function(val)
+        STATE.WalkSpeedValue = math.clamp(val, 16, CONFIG.Movement.MaxWalkSpeed)
+        local char = LocalPlayer.Character
+        if char and char:FindFirstChildOfClass("Humanoid") then
+            -- Chống anti-cheat giật bằng cách kiểm tra và gán nhịp nhàng
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            hum.WalkSpeed = STATE.WalkSpeedValue
+        end
+    end,
+    SetFly = function(enabled, speed)
+        STATE.FlyEnabled = enabled
+        STATE.FlySpeedValue = speed or STATE.FlySpeedValue
+        local char = LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        
+        if enabled and root then
+            if FlyBodyVelocity then FlyBodyVelocity:Destroy() end
+            if FlyBodyGyro then FlyBodyGyro:Destroy() end
+
+            FlyBodyVelocity = make("BodyVelocity", {
+                MaxForce = Vector3.new(math.huge, math.huge, math.huge),
+                Velocity = Vector3.zero,
+                Parent = root
+            })
+            FlyBodyGyro = make("BodyGyro", {
+                MaxTorque = Vector3.new(math.huge, math.huge, math.huge),
+                CFrame = root.CFrame,
+                Parent = root
+            })
+            pushLog("INFO", "Fly enabled (Speed: " .. STATE.FlySpeedValue .. ")")
+        else
+            if FlyBodyVelocity then FlyBodyVelocity:Destroy() end
+            if FlyBodyGyro then FlyBodyGyro:Destroy() end
+            FlyBodyVelocity, FlyBodyGyro = nil, nil
+            pushLog("INFO", "Fly disabled")
+        end
+    end,
+    ToggleInfJump = function(enabled)
+        STATE.InfJumpEnabled = enabled
+        pushLog("INFO", "Infinity Jump toggled: " .. tostring(enabled))
+    end
+}
+
+--// FIX LAG & GRAPHICS OPTIMIZATION
+local function applyFixLag(enabled)
+    STATE.FixLagEnabled = enabled
+    if enabled then
+        pcall(function()
+            settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+            Lighting.GlobalShadows = false
+            Lighting.Brightness = 2
+            for _, v in ipairs(workspace:GetDescendants()) do
+                if v:IsA("BasePart") then
+                    v.Material = Enum.Material.SmoothPlastic
+                    v.Reflectance = 0
+                elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Fire") or v:IsA("Smoke") then
+                    v.Enabled = false
+                end
+            end
+        end)
+        pushLog("INFO", "Fix Lag enabled: Optimized environment and graphics.")
+    else
+        Lighting.GlobalShadows = true
+        pushLog("INFO", "Fix Lag disabled.")
+    end
+end
+
+--// SERVER HOPPING (LOW PLAYER SERVERS)
+local function hopLowPlayerServer()
+    setStatus("READY", "Searching for low player server...")
+    local servers = {}
+    local success, page = pcall(function()
+        return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"))
+    end)
+    
+    if success and page and page.data then
+        for _, s in ipairs(page.data) do
+            if type(s) == "table" and s.playing and s.maxPlayers and s.playing < s.maxPlayers and s.id ~= game.JobId then
+                table.insert(servers, s.id)
+            end
+        end
+    end
+    
+    if #servers > 0 then
+        local targetServer = servers[math.random(1, #servers)]
+        setStatus("READY", "Teleporting to low player server...")
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, targetServer, LocalPlayer)
+    else
+        setStatus("ERROR", "Could not find any low player server.")
+    end
+end
+
+--// COMBAT: HIT PLAYER (FLY & SPAM ATTACK)
+local function toggleHitPlayer(enabled)
+    STATE.HitPlayerRunning = enabled
+    if enabled and STATE.SelectedTargetPlayer then
+        task.spawn(function()
+            while STATE.HitPlayerRunning and STATE.SelectedTargetPlayer.Parent do
+                pcall(function()
+                    local char = LocalPlayer.Character
+                    local targetChar = STATE.SelectedTargetPlayer.Character
+                    local root = char and char:FindFirstChild("HumanoidRootPart")
+                    local targetRoot = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
+                    
+                    if root and targetRoot then
+                        -- Bay bám sát đầu mục tiêu
+                        root.CFrame = targetRoot.CFrame * CFrame.new(0, 3, 0)
+                        root.AssemblyLinearVelocity = Vector3.zero
+                        
+                        -- Tự động cầm gậy/vũ khí và spam tấn công liên tục
+                        local tool = char:FindFirstChildOfClass("Tool") or LocalPlayer.Backpack:FindFirstChildOfClass("Tool")
+                        if tool then
+                            tool.Parent = char
+                            tool:Activate()
+                        end
+                    end
+                end)
+                task.wait(0.08)
+            end
+        end)
+        pushLog("INFO", "Hit Player started tracking: " .. STATE.SelectedTargetPlayer.Name)
+    else
+        pushLog("INFO", "Hit Player stopped")
+    end
+end
+
+--// UI SLIDER & BUILDERS
+local function createSlider(parent, text, min, max, default, callback)
+    local container = make("Frame", {
+        BackgroundColor3 = CONFIG.Theme.Background,
+        Size = UDim2.new(1, 0, 0, 50),
+        BackgroundTransparency = 0,
+    }, parent)
+    corner(container, 6)
+    stroke(container, Color3.fromRGB(50, 50, 60), 1)
+
+    local titleLabel = label(container, "  " .. text .. ": " .. default, 12, CONFIG.Theme.White)
+    titleLabel.Position = UDim2.new(0, 0, 0, 4)
+    titleLabel.Size = UDim2.new(1, 0, 0, 20)
+
+    local sliderBar = make("Frame", {
+        BackgroundColor3 = Color3.fromRGB(50, 50, 60),
+        Position = UDim2.new(0, 10, 0, 30),
+        Size = UDim2.new(1, -20, 0, 8),
+    }, container)
+    corner(sliderBar, 4)
+
+    local fillBar = make("Frame", {
+        BackgroundColor3 = CONFIG.Theme.Red,
+        Size = UDim2.new((default - min) / (max - min), 0, 1, 0),
+    }, sliderBar)
+    corner(fillBar, 4)
+
+    local dragging = false
+    sliderBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local pos = math.clamp((input.Position.X - sliderBar.AbsolutePosition.X) / sliderBar.AbsoluteSize.X, 0, 1)
+            local val = math.floor(min + (max - min) * pos)
+            fillBar.Size = UDim2.new(pos, 0, 1, 0)
+            titleLabel.Text = "  " .. text .. ": " .. val
+            pcall(function() callback(val) end)
+        end
+    end)
+    return container
+end
+
+local function selectPage(pageName)
+    for name, page in pairs(UI.Pages) do
+        page.Visible = (name == pageName)
+    end
+    for name, btn in pairs(UI.Buttons) do
+        if name == pageName then
+            btn.BackgroundColor3 = CONFIG.Theme.Red
+            btn.TextColor3 = CONFIG.Theme.White
+        else
+            btn.BackgroundColor3 = CONFIG.Theme.Panel
+            btn.TextColor3 = CONFIG.Theme.Gray
+        end
+    end
+end
+
+local function createPage(name)
+    local p = make("ScrollingFrame", {
+        Name = name,
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 1, 0),
+        CanvasSize = UDim2.new(0, 0, 2.5, 0),
+        ScrollBarThickness = 4,
+        Visible = false,
+    }, UI.Content)
+
+    make("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }, p)
+    make("UIPadding", { PaddingTop = UDim.new(0, 10), PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) }, p)
+
+    UI.Pages[name] = p
+    return p
+end
+
+local function section(parent, titleText)
+    local s = label(parent, titleText:upper(), 11, CONFIG.Theme.Gold)
+    s.Font = Enum.Font.GothamBold
+    s.Size = UDim2.new(1, 0, 0, 20)
+    return s
+end
+
+local function button(parent, text, callback)
+    local b = make("TextButton", {
+        AutoButtonColor = false,
+        BackgroundColor3 = CONFIG.Theme.Background,
+        Size = UDim2.new(1, 0, 0, 32),
+        Text = "  " .. text,
+        TextColor3 = CONFIG.Theme.White,
+        Font = Enum.Font.GothamMedium,
+        TextSize = 12,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, parent)
+    corner(b, 6)
+    stroke(b, Color3.fromRGB(50, 50, 60), 1)
+
+    b.Activated:Connect(function()
+        local success, err = pcall(callback)
+        if not success then
+            STATE.ErrorsCount += 1
+            pushLog("ERROR", tostring(err))
+        end
+    end)
+    return b
+end
+
+local function toggle(parent, text, default, callback)
+    local tState = default
+    local b = make("TextButton", {
+        AutoButtonColor = false,
+        BackgroundColor3 = CONFIG.Theme.Background,
+        Size = UDim2.new(1, 0, 0, 32),
+        Text = "  " .. text,
+        TextColor3 = CONFIG.Theme.White,
+        Font = Enum.Font.GothamMedium,
+        TextSize = 12,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, parent)
+    corner(b, 6)
+    stroke(b, Color3.fromRGB(50, 50, 60), 1)
+
+    local indicator = make("Frame", {
+        AnchorPoint = Vector2.new(1, 0.5),
+        Position = UDim2.new(1, -10, 0.5, 0),
+        Size = UDim2.fromOffset(36, 18),
+        BackgroundColor3 = tState and CONFIG.Theme.Green or Color3.fromRGB(60, 60, 70),
+    }, b)
+    corner(indicator, 9)
+
+    local circle = make("Frame", {
+        AnchorPoint = Vector2.new(0, 0.5),
+        Position = tState and UDim2.new(1, -16, 0.5, 0) or UDim2.new(0, 2, 0.5, 0),
+        Size = UDim2.fromOffset(14, 14),
+        BackgroundColor3 = CONFIG.Theme.White,
+    }, indicator)
+    corner(circle, 7)
+
+    b.Activated:Connect(function()
+        tState = not tState
+        indicator.BackgroundColor3 = tState and CONFIG.Theme.Green or Color3.fromRGB(60, 60, 70)
+        circle.Position = tState and UDim2.new(1, -16, 0.5, 0) or UDim2.new(0, 2, 0.5, 0)
+        pcall(function() callback(tState) end)
+    end)
+    return b
+end
+
+--// MAIN UI CREATION WITH FLOATING ICON
+local function createUI()
+    local existing = PlayerGui:FindFirstChild(CONFIG.Name)
+    if existing then existing:Destroy() end
+
+    UI.Gui = make("ScreenGui", {
+        Name = CONFIG.Name,
+        ResetOnSpawn = false,
+        IgnoreGuiInset = true,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+    }, PlayerGui)
+
+    -- Icon tròn thu nhỏ khi đóng menu
+    UI.FloatingIcon = make("TextButton", {
+        Name = "FloatingIcon",
+        AnchorPoint = Vector2.new(0, 0.5),
+        Position = UDim2.new(0, 20, 0.5, 0),
+        Size = UDim2.fromOffset(50, 50),
+        BackgroundColor3 = CONFIG.Theme.Red,
+        Text = "🐉",
+        TextColor3 = CONFIG.Theme.White,
+        TextSize = 22,
+        Visible = false,
+        AutoButtonColor = false,
+    }, UI.Gui)
+    corner(UI.FloatingIcon, 25)
+    stroke(UI.FloatingIcon, CONFIG.Theme.Gold, 2)
+
+    UI.Main = make("Frame", {
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.5),
+        Size = UDim2.new(0, 760, 0, 500),
+        BackgroundColor3 = CONFIG.Theme.Background,
+    }, UI.Gui)
+    corner(UI.Main, 14)
+    stroke(UI.Main, CONFIG.Theme.Red, 2)
+
+    local top = make("Frame", {
+        BackgroundColor3 = CONFIG.Theme.Panel,
+        Size = UDim2.new(1, 0, 0, 66),
+    }, UI.Main)
+    corner(top, 14)
+
+    local title = label(top, "🐉  KHANG NGUYEN HUB", 18, CONFIG.Theme.Gold)
+    title.Font = Enum.Font.GothamBlack
+    title.Position = UDim2.new(0, 18, 0, 8)
+
+    local subtitle = label(top, "STEAL AN EGG  •  ULTIMATE PRO v" .. CONFIG.Version, 10, CONFIG.Theme.Gray)
+    subtitle.Position = UDim2.new(0, 19, 0, 37)
+
+    -- Nút Đóng / Thu nhỏ thành hình tròn
+    local close = make("TextButton", {
+        AutoButtonColor = false,
+        BackgroundColor3 = Color3.fromRGB(50, 25, 28),
+        Position = UDim2.new(1, -48, 0, 17),
+        Size = UDim2.fromOffset(30, 30),
+        Text = "×",
+        TextColor3 = CONFIG.Theme.White,
+        Font = Enum.Font.GothamBold,
+        TextSize = 20,
+    }, top)
+    corner(close, 8)
+
+    close.Activated:Connect(function()
+        UI.Main.Visible = false
+        UI.FloatingIcon.Visible = true
+    end)
+
+    UI.FloatingIcon.Activated:Connect(function()
+        UI.Main.Visible = true
+        UI.FloatingIcon.Visible = false
+    end)
+
+    local sidebar = make("Frame", {
+        BackgroundColor3 = CONFIG.Theme.Panel,
+        Position = UDim2.new(0, 10, 0, 76),
+        Size = UDim2.new(0, 150, 1, -86),
+    }, UI.Main)
+    corner(sidebar, 10)
+
+    make("UIListLayout", { Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.LayoutOrder }, sidebar)
+    make("UIPadding", { PaddingTop = UDim.new(0, 9), PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) }, sidebar)
+
+    UI.Content = make("Frame", {
+        BackgroundColor3 = CONFIG.Theme.Panel,
+        Position = UDim2.new(0, 170, 0, 76),
+        Size = UDim2.new(1, -180, 1, -86),
+    }, UI.Main)
+    corner(UI.Content, 10)
+
+    local pages = {
+        {"Main", "MAIN"},
+        {"Movement", "MOVEMENT"},
+        {"Egg", "FARM EGG"},
+        {"Combat", "COMBAT"},
+        {"Server", "SERVER & LAG"},
+        {"Settings", "SETTINGS"},
+    }
+
+    for _, item in ipairs(pages) do
+        local name, text = item[1], item[2]
+        local b = make("TextButton", {
+            AutoButtonColor = false,
+            BackgroundColor3 = CONFIG.Theme.Panel,
+            Size = UDim2.new(1, 0, 0, 35),
+            Text = text,
+            TextColor3 = CONFIG.Theme.Gray,
+            Font = Enum.Font.GothamBold,
+            TextSize = 11,
+        }, sidebar)
+        corner(b, 7)
+        UI.Buttons[name] = b
+        b.Activated:Connect(function() selectPage(name) end)
+        createPage(name)
+    end
+
+    UI.StatusLabel = label(UI.Main, "● READY", 9, CONFIG.Theme.Green)
+    UI.StatusLabel.Position = UDim2.new(0, 180, 1, -25)
+    UI.StatusLabel.Size = UDim2.new(0.55, 0, 0, 18)
+
+    -- PAGE: MAIN
+    do
+        local p = UI.Pages.Main
+        section(p, "Overview")
+        toggle(p, "Fix Lag & Optimize", false, function(enabled) applyFixLag(enabled) end)
+        button(p, "Find Low Player Server", function() hopLowPlayerServer() end)
+    end
+
+    -- PAGE: MOVEMENT
+    do
+        local p = UI.Pages.Movement
+        section(p, "Speed & Flight Settings")
+        createSlider(p, "WalkSpeed", 16, CONFIG.Movement.MaxWalkSpeed, STATE.WalkSpeedValue, function(val)
+            Movement.ApplyWalkSpeed(val)
+        end)
+        createSlider(p, "Fly Speed", 10, CONFIG.Movement.MaxFlySpeed, STATE.FlySpeedValue, function(val)
+            STATE.FlySpeedValue = val
+        end)
+        toggle(p, "Fly Mode", false, function(enabled) Movement.SetFly(enabled, STATE.FlySpeedValue) end)
+        toggle(p, "Infinity Jump", false, function(enabled) Movement.ToggleInfJump(enabled) end)
+    end
+
+    -- PAGE: FARM EGG
+    do
+        local p = UI.Pages.Egg
+        section(p, "Steal An Egg Automation")
+        button(p, "Map Area: " .. STATE.CurrentArea, function()
+            local areas = CONFIG.GameSpecific.ValidAreas
+            local idx = table.find(areas, STATE.CurrentArea) or 1
+            STATE.CurrentArea = areas[idx % #areas + 1]
+            setStatus("READY", "Target Map = " .. STATE.CurrentArea)
+        end)
+        button(p, "Mutation: " .. STATE.SelectedMutation, function()
+            local muts = CONFIG.GameSpecific.ValidMutations
+            local idx = table.find(muts, STATE.SelectedMutation) or 1
+            STATE.SelectedMutation = muts[idx % #muts + 1]
+            setStatus("READY", "Mutation = " .. STATE.SelectedMutation)
+        end)
+        button(p, "Egg Type: " .. STATE.TargetEggType, function()
+            local types = CONFIG.GameSpecific.ValidEggTypes
+            local idx = table.find(types, STATE.TargetEggType) or 1
+            STATE.TargetEggType = types[idx % #types + 1]
+            setStatus("READY", "Egg Filter = " .. STATE.TargetEggType)
+        end)
+        toggle(p, "Auto Farm & Steal Eggs", false, function(enabled)
+            STATE.AutoStealRunning = enabled
+            setStatus("READY", enabled and ("Farming Eggs in " .. STATE.CurrentArea) or "Auto Steal stopped")
+        end)
+    end
+
+    -- PAGE: COMBAT (Hit Player Feature)
+    do
+        local p = UI.Pages.Combat
+        section(p, "Target Hit Lock")
+        button(p, "Target: " .. (STATE.SelectedTargetPlayer and STATE.SelectedTargetPlayer.Name or "None (Click to Cycle)"), function()
+            local players = Players:GetPlayers()
+            for i, plr in ipairs(players) do
+                if plr ~= LocalPlayer then
+                    STATE.SelectedTargetPlayer = plr
+                    setStatus("READY", "Locked Target: " .. plr.Name)
+                    break
+                end
+            end
+        end)
+        toggle(p, "Hit Player (Fly & Spam Attack)", false, function(enabled)
+            if not STATE.SelectedTargetPlayer and enabled then
+                setStatus("BLOCKED", "Please select a target player first!")
+                return
+            end
+            toggleHitPlayer(enabled)
+        end)
+    end
+
+    -- PAGE: SERVER & LAG
+    do
+        local p = UI.Pages.Server
+        section(p, "Server Utilities")
+        button(p, "Hop Low Player Server", function() hopLowPlayerServer() end)
+        section(p, "Performance")
+        toggle(p, "Fix Lag / Low FX Mode", STATE.FixLagEnabled, function(enabled) applyFixLag(enabled) end)
+    end
+
+    -- PAGE: SETTINGS
+    do
+        local p = UI.Pages.Settings
+        section(p, "Configurations")
+        button(p, "Destroy Hub", function()
+            if UI.Gui then UI.Gui:Destroy() end
+        end)
+    end
+
+    selectPage("Main")
+end
+
+--// RUNTIME BINDINGS
+local function bindRuntime()
+    CONNECTIONS["Jump"] = UserInputService.JumpRequest:Connect(function()
+        if STATE.InfJumpEnabled then
+            local char = LocalPlayer.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if hum then
+                hum:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+        end
+    end)
+
+    CONNECTIONS["FlyRender"] = RunService.RenderStepped:Connect(function()
+        if STATE.FlyEnabled and FlyBodyVelocity then
+            local camera = workspace.CurrentCamera
+            local moveDir = Vector3.zero
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir += camera.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir -= camera.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir -= camera.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir += camera.CFrame.RightVector end
+            FlyBodyVelocity.Velocity = moveDir * STATE.FlySpeedValue
+            if FlyBodyGyro then FlyBodyGyro.CFrame = camera.CFrame end
+        end
+    end)
+end
+
+--// INITIALIZATION
+local function initialize()
+    if STATE.Initialized then return end
+    STATE.Initialized = true
+    createUI()
+    bindRuntime()
+    pushLog("INFO", "KhangNguyenHub v" .. CONFIG.Version .. " fully initialized.")
+    setStatus("READY", "System fully loaded.")
+end
+
+initialize()
