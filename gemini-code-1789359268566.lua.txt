@@ -1,0 +1,1270 @@
+-- ==========================================
+-- SCRIPT: Khang Nguyên Trùm 9A7 — EGG FLOW & AUTO-SCANNER API (FULL & STABLE)
+-- ==========================================
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+
+local LocalPlayer = Players.LocalPlayer
+
+-- Character & Movement References
+local Character, Humanoid, RootPart
+local FlyVelocity, FlyGyro
+local WalkSpeedConnection, FlyConnection
+
+local function UpdateCharacterReferences(newChar)
+    if not newChar then return end
+    Character = newChar
+    Humanoid = newChar:WaitForChild("Humanoid", 5)
+    RootPart = newChar:WaitForChild("HumanoidRootPart", 5)
+end
+
+if LocalPlayer.Character then
+    UpdateCharacterReferences(LocalPlayer.Character)
+end
+
+local State = {
+    AutoStealTarget = false,
+    AutoCollectMutHuge = false,
+    AutoOpenEgg = false,
+    AutoKingOfHill = false,
+    AutoFarmBoss = false,
+    BatAura = false,
+    AntiTrap = true,
+    AntiRagdoll = true,
+    AutoTreadmill = false,
+    AutoRebirth = false,
+    AutoCollectDrops = false,
+    AutoUpgradeBase = false,
+    TrueFly = false,
+    FlyToSelectedEgg = false,
+    ReturnToSpawn = false,
+    FlySpeed = 65,
+    WalkSpeedVal = 16
+}
+
+-- ----------------------------------------------------
+-- HỆ THỐNG TỰ ĐỘNG QUÉT & GÁN REMOTE (AUTO-SCANNER)
+-- ----------------------------------------------------
+local GameAPI = {
+    CollectSelectedEgg = nil,
+    CollectAllMutatedHuge = nil,
+    OpenEgg = nil,
+    FarmBoss = nil,
+    CollectDrop = nil,
+    Rebirth = nil,
+    KingOfHill = nil,
+    BatAttack = nil,
+    Treadmill = nil,
+    AntiTrap = nil
+}
+
+local function AutoFindRemote(keywordList)
+    for _, desc in ipairs(game:GetDescendants()) do
+        if desc:IsA("RemoteEvent") or desc:IsA("RemoteFunction") then
+            local name = desc.Name:lower()
+            for _, kw in ipairs(keywordList) do
+                if name:find(kw:lower()) then
+                    return desc
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- Tự động quét và liên kết API khi chạy script
+GameAPI.OpenEgg = AutoFindRemote({"openegg", "hatch", "eggopen", "open"})
+GameAPI.Rebirth = AutoFindRemote({"rebirth", "prestige", "evolution"})
+GameAPI.CollectDrop = AutoFindRemote({"collectdrop", "pickup", "getcoin", "loot", "money"})
+GameAPI.FarmBoss = AutoFindRemote({"boss", "attackboss", "fightboss"})
+GameAPI.KingOfHill = AutoFindRemote({"hill", "capture", "king", "zone"})
+GameAPI.BatAttack = AutoFindRemote({"bat", "attack", "hit", "swing", "combat"})
+GameAPI.Treadmill = AutoFindRemote({"treadmill", "gym", "train", "workout"})
+
+GameAPI.CollectSelectedEgg = function(egg)
+    local remote = AutoFindRemote({"collectegg", "stealand", "takeegg", "eggcollect", "steal"})
+    if remote then
+        remote:FireServer(egg)
+        return true, "Đã gửi yêu cầu thành công"
+    end
+    return false, "Không tìm thấy Remote phù hợp"
+end
+
+GameAPI.CollectAllMutatedHuge = function()
+    local remote = AutoFindRemote({"mutated", "huge", "collectall", "claimall"})
+    if remote then
+        remote:FireServer()
+        return true
+    end
+    return false
+end
+
+-- Safe GUI Parent
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "KhangNguyenTrum9A7_UI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = (CoreGui:FindFirstChild("RobloxGui") or CoreGui)
+
+-- Mobile Floating Icon
+local MobileBtn = Instance.new("ImageButton")
+MobileBtn.Name = "KhangNguyen_MobileIcon"
+MobileBtn.Size = UDim2.new(0, 52, 0, 52)
+MobileBtn.Position = UDim2.new(0.05, 0, 0.2, 0)
+MobileBtn.BackgroundColor3 = Color3.fromRGB(18, 18, 30)
+MobileBtn.BackgroundTransparency = 0.25
+MobileBtn.Active = true
+MobileBtn.Draggable = true
+MobileBtn.Parent = ScreenGui
+
+local BtnCorner = Instance.new("UICorner", MobileBtn)
+BtnCorner.CornerRadius = UDim.new(1, 0)
+local BtnStroke = Instance.new("UIStroke", MobileBtn)
+BtnStroke.Color = Color3.fromRGB(255, 105, 180)
+BtnStroke.Thickness = 2
+
+local BtnText = Instance.new("TextLabel")
+BtnText.Size = UDim2.new(1, 0, 1, 0)
+BtnText.BackgroundTransparency = 1
+BtnText.Text = "9A7"
+BtnText.TextColor3 = Color3.fromRGB(255, 192, 203)
+BtnText.Font = Enum.Font.GothamBold
+BtnText.TextSize = 13
+BtnText.Parent = MobileBtn
+
+-- Main Window
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 520, 0, 330)
+MainFrame.Position = UDim2.new(0.5, -260, 0.5, -165)
+MainFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 20)
+MainFrame.BackgroundTransparency = 0.2
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
+
+local MainCorner = Instance.new("UICorner", MainFrame)
+MainCorner.CornerRadius = UDim.new(0, 10)
+local MainStroke = Instance.new("UIStroke", MainFrame)
+MainStroke.Color = Color3.fromRGB(255, 105, 180)
+MainStroke.Thickness = 1.5
+
+local TitleBar = Instance.new("TextLabel")
+TitleBar.Size = UDim2.new(1, -20, 0, 38)
+TitleBar.Position = UDim2.new(0, 12, 0, 0)
+TitleBar.BackgroundTransparency = 1
+TitleBar.Text = "KHANG NGUYÊN TRÙM 9A7 — AUTO-SCANNER & EGG FLOW"
+TitleBar.TextColor3 = Color3.fromRGB(255, 192, 203)
+TitleBar.TextSize = 13
+TitleBar.Font = Enum.Font.GothamBold
+TitleBar.TextXAlignment = Enum.TextXAlignment.Left
+TitleBar.Parent = MainFrame
+
+MobileBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
+end)
+
+local Sidebar = Instance.new("Frame")
+Sidebar.Size = UDim2.new(0, 130, 1, -40)
+Sidebar.Position = UDim2.new(0, 5, 0, 38)
+Sidebar.BackgroundTransparency = 1
+Sidebar.Parent = MainFrame
+
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, -145, 1, -45)
+Content.Position = UDim2.new(0, 140, 0, 40)
+Content.BackgroundTransparency = 1
+Content.Parent = MainFrame
+
+local Pages = {}
+local function CreateTab(name, isDefault)
+    local TabBtn = Instance.new("TextButton")
+    TabBtn.Size = UDim2.new(1, -8, 0, 30)
+    TabBtn.Position = UDim2.new(0, 4, 0, #Sidebar:GetChildren() * 34)
+    TabBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 40)
+    TabBtn.BackgroundTransparency = 0.4
+    TabBtn.Text = name
+    TabBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+    TabBtn.Font = Enum.Font.GothamMedium
+    TabBtn.TextSize = 11
+    TabBtn.Parent = Sidebar
+
+    local Corner = Instance.new("UICorner", TabBtn)
+    Corner.CornerRadius = UDim.new(0, 5)
+
+    local Page = Instance.new("ScrollingFrame")
+    Page.Size = UDim2.new(1, 0, 1, 0)
+    Page.BackgroundTransparency = 1
+    Page.ScrollBarThickness = 2
+    Page.Visible = isDefault or false
+    Page.Parent = Content
+    
+    local Layout = Instance.new("UIListLayout", Page)
+    Layout.SortOrder = Enum.SortOrder.LayoutOrder
+    Layout.Padding = UDim.new(0, 5)
+
+    Pages[name] = {Btn = TabBtn, View = Page}
+
+    TabBtn.MouseButton1Click:Connect(function()
+        for _, p in pairs(Pages) do
+            p.View.Visible = false
+            p.Btn.BackgroundColor3 = Color3.fromRGB(25, 25, 40)
+        end
+        Page.Visible = true
+        TabBtn.BackgroundColor3 = Color3.fromRGB(255, 105, 180)
+    end)
+
+    if isDefault then TabBtn.BackgroundColor3 = Color3.fromRGB(255, 105, 180) end
+    return Page
+end
+
+local TabSteal = CreateTab("Trộm Trứng", true)
+local TabCombat = CreateTab("Săn Boss", false)
+local TabFarm = CreateTab("Cày Tự Động", false)
+local TabMove = CreateTab("Di Chuyển", false)
+local TabAnti = CreateTab("Kháng Lỗi", false)
+
+local function AddToggle(parent, text, stateKey, onToggleCallback)
+    local Btn = Instance.new("TextButton")
+    Btn.Size = UDim2.new(0.96, 0, 0, 30)
+    Btn.BackgroundColor3 = Color3.fromRGB(20, 20, 32)
+    Btn.BackgroundTransparency = 0.3
+    Btn.Text = "  " .. text .. ": [ " .. (State[stateKey] and "ON" or "OFF") .. " ]"
+    Btn.TextColor3 = State[stateKey] and Color3.fromRGB(50, 255, 130) or Color3.fromRGB(170, 170, 170)
+    Btn.Font = Enum.Font.Gotham
+    Btn.TextSize = 11
+    Btn.TextXAlignment = Enum.TextXAlignment.Left
+    Btn.Parent = parent
+
+    local Corner = Instance.new("UICorner", Btn)
+    Corner.CornerRadius = UDim.new(0, 5)
+
+    Btn.MouseButton1Click:Connect(function()
+        State[stateKey] = not State[stateKey]
+        if State[stateKey] then
+            Btn.Text = "  " .. text .. ": [ ON ]"
+            Btn.TextColor3 = Color3.fromRGB(50, 255, 130)
+        else
+            Btn.Text = "  " .. text .. ": [ OFF ]"
+            Btn.TextColor3 = Color3.fromRGB(170, 170, 170)
+        end
+        if onToggleCallback then
+            pcall(function()
+                onToggleCallback(State[stateKey])
+            end)
+        end
+    end)
+end
+
+local function AddSlider(parent, text, min, max, default, callback)
+    local Container = Instance.new("Frame")
+    Container.Size = UDim2.new(0.96, 0, 0, 45)
+    Container.BackgroundColor3 = Color3.fromRGB(20, 20, 32)
+    Container.BackgroundTransparency = 0.3
+    Container.Parent = parent
+    
+    local Corner = Instance.new("UICorner", Container)
+    Corner.CornerRadius = UDim.new(0, 5)
+
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(1, -10, 0, 20)
+    Label.Position = UDim2.new(0, 6, 0, 2)
+    Label.BackgroundTransparency = 1
+    Label.Text = "  " .. text .. ": " .. default
+    Label.TextColor3 = Color3.fromRGB(220, 220, 220)
+    Label.Font = Enum.Font.Gotham
+    Label.TextSize = 11
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.Parent = Container
+
+    local InputBox = Instance.new("TextBox")
+    InputBox.Size = UDim2.new(0.9, 0, 0, 18)
+    InputBox.Position = UDim2.new(0.05, 0, 0, 22)
+    InputBox.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+    InputBox.Text = tostring(default)
+    InputBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+    InputBox.Font = Enum.Font.Gotham
+    InputBox.TextSize = 11
+    InputBox.Parent = Container
+    
+    local BoxCorner = Instance.new("UICorner", InputBox)
+    BoxCorner.CornerRadius = UDim.new(0, 4)
+
+    InputBox.FocusLost:Connect(function()
+        local val = tonumber(InputBox.Text)
+        if val then
+            val = math.clamp(val, min, max)
+            InputBox.Text = tostring(val)
+            Label.Text = "  " .. text .. ": " .. val
+            pcall(function()
+                callback(val)
+            end)
+        end
+    end)
+end
+
+-- ----------------------------------------------------
+-- 3D EGG & PET PREVIEW SYSTEM
+-- ----------------------------------------------------
+SelectedEggInstance = nil
+SelectedPetModel = nil
+
+local FilterConfig = {
+    SelectedMap = "Tất cả Map",
+    SelectedCategory = "Tất cả Thể Loại",
+    FilterMutation = false,
+    FilterHuge = false
+}
+
+local function Create3DPreviewTab(parentTab)
+    local PreviewContainer = Instance.new("Frame")
+    PreviewContainer.Size = UDim2.new(0.96, 0, 0, 320)
+    PreviewContainer.BackgroundColor3 = Color3.fromRGB(18, 18, 28)
+    PreviewContainer.BackgroundTransparency = 0.2
+    PreviewContainer.Parent = parentTab
+
+    local Corner = Instance.new("UICorner", PreviewContainer)
+    Corner.CornerRadius = UDim.new(0, 8)
+
+    local Stroke = Instance.new("UIStroke", PreviewContainer)
+    Stroke.Color = Color3.fromRGB(255, 105, 180)
+    Stroke.Thickness = 1.2
+
+    local TitleLabel = Instance.new("TextLabel")
+    TitleLabel.Size = UDim2.new(1, -12, 0, 20)
+    TitleLabel.Position = UDim2.new(0, 6, 0, 2)
+    TitleLabel.BackgroundTransparency = 1
+    TitleLabel.Text = "  BỘ LỌC MAP, MUTATION, HUGE & 3D PET PREVIEW"
+    TitleLabel.TextColor3 = Color3.fromRGB(255, 192, 203)
+    TitleLabel.Font = Enum.Font.GothamBold
+    TitleLabel.TextSize = 11
+    TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    TitleLabel.Parent = PreviewContainer
+
+    local StatusLabel = Instance.new("TextLabel")
+    StatusLabel.Size = UDim2.new(1, -12, 0, 16)
+    StatusLabel.Position = UDim2.new(0, 6, 0, 20)
+    StatusLabel.BackgroundTransparency = 1
+    StatusLabel.Text = "  Trạng thái: Chọn bộ lọc và quét Egg ở Cửa 1"
+    StatusLabel.TextColor3 = Color3.fromRGB(170, 170, 170)
+    StatusLabel.Font = Enum.Font.Gotham
+    StatusLabel.TextSize = 9
+    StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+    StatusLabel.Parent = PreviewContainer
+
+    local FilterBar = Instance.new("Frame")
+    FilterBar.Size = UDim2.new(1, -12, 0, 48)
+    FilterBar.Position = UDim2.new(0, 6, 0, 38)
+    FilterBar.BackgroundColor3 = Color3.fromRGB(22, 22, 35)
+    FilterBar.BackgroundTransparency = 0.3
+    FilterBar.Parent = PreviewContainer
+
+    local FilterBarCorner = Instance.new("UICorner", FilterBar)
+    FilterBarCorner.CornerRadius = UDim.new(0, 4)
+
+    local MapBtn = Instance.new("TextButton")
+    MapBtn.Size = UDim2.new(0.48, -2, 0, 20)
+    MapBtn.Position = UDim2.new(0, 2, 0, 2)
+    MapBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 55)
+    MapBtn.Text = "Map: Tất cả Map"
+    MapBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    MapBtn.Font = Enum.Font.Gotham
+    MapBtn.TextSize = 9
+    MapBtn.Parent = FilterBar
+
+    local Maps = {"Tất cả Map", "Map 1", "Map 2", "Map 3", "Map Lava", "Map Ice"}
+    local mapIndex = 1
+    MapBtn.MouseButton1Click:Connect(function()
+        mapIndex = mapIndex % #Maps + 1
+        FilterConfig.SelectedMap = Maps[mapIndex]
+        MapBtn.Text = "Map: " .. FilterConfig.SelectedMap
+    end)
+
+    local CatBtn = Instance.new("TextButton")
+    CatBtn.Size = UDim2.new(0.48, -2, 0, 20)
+    CatBtn.Position = UDim2.new(0.52, 0, 0, 2)
+    CatBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 55)
+    CatBtn.Text = "Thể loại: Tất cả"
+    CatBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    CatBtn.Font = Enum.Font.Gotham
+    CatBtn.TextSize = 9
+    CatBtn.Parent = FilterBar
+
+    local Categories = {"Tất cả", "Trứng Thường", "Trứng Đặc Biệt", "Trứng Sự Kiện", "Trứng Boss"}
+    local catIndex = 1
+    CatBtn.MouseButton1Click:Connect(function()
+        catIndex = catIndex % #Categories + 1
+        FilterConfig.SelectedCategory = Categories[catIndex]
+        CatBtn.Text = "Thể loại: " .. FilterConfig.SelectedCategory
+    end)
+
+    local MutBtn = Instance.new("TextButton")
+    MutBtn.Size = UDim2.new(0.48, -2, 0, 20)
+    MutBtn.Position = UDim2.new(0, 2, 0, 25)
+    MutBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 55)
+    MutBtn.Text = "Mutation: [ OFF ]"
+    MutBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+    MutBtn.Font = Enum.Font.Gotham
+    MutBtn.TextSize = 9
+    MutBtn.Parent = FilterBar
+
+    MutBtn.MouseButton1Click:Connect(function()
+        FilterConfig.FilterMutation = not FilterConfig.FilterMutation
+        if FilterConfig.FilterMutation then
+            MutBtn.Text = "Mutation: [ ON ]"
+            MutBtn.TextColor3 = Color3.fromRGB(50, 255, 130)
+        else
+            MutBtn.Text = "Mutation: [ OFF ]"
+            MutBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+        end
+    end)
+
+    local HugeBtn = Instance.new("TextButton")
+    HugeBtn.Size = UDim2.new(0.48, -2, 0, 20)
+    HugeBtn.Position = UDim2.new(0.52, 0, 0, 25)
+    HugeBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 55)
+    HugeBtn.Text = "Huge Egg: [ OFF ]"
+    HugeBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+    HugeBtn.Font = Enum.Font.Gotham
+    HugeBtn.TextSize = 9
+    HugeBtn.Parent = FilterBar
+
+    HugeBtn.MouseButton1Click:Connect(function()
+        FilterConfig.FilterHuge = not FilterConfig.FilterHuge
+        if FilterConfig.FilterHuge then
+            HugeBtn.Text = "Huge Egg: [ ON ]"
+            HugeBtn.TextColor3 = Color3.fromRGB(50, 255, 130)
+        else
+            HugeBtn.Text = "Huge Egg: [ OFF ]"
+            HugeBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+        end
+    end)
+
+    local Viewport = Instance.new("ViewportFrame")
+    Viewport.Size = UDim2.new(1, -12, 0, 110)
+    Viewport.Position = UDim2.new(0, 6, 0, 90)
+    Viewport.BackgroundTransparency = 1
+    Viewport.Parent = PreviewContainer
+
+    local WorldModel = Instance.new("WorldModel")
+    WorldModel.Parent = Viewport
+
+    local Camera = Instance.new("Camera")
+    Viewport.CurrentCamera = Camera
+    Camera.Parent = Viewport
+
+    local EggListContainer = Instance.new("ScrollingFrame")
+    EggListContainer.Size = UDim2.new(0.48, -4, 0, 48)
+    EggListContainer.Position = UDim2.new(0, 6, 1, -82)
+    EggListContainer.BackgroundColor3 = Color3.fromRGB(24, 24, 38)
+    EggListContainer.BackgroundTransparency = 0.3
+    EggListContainer.ScrollBarThickness = 2
+    EggListContainer.Parent = PreviewContainer
+
+    local EggListLayout = Instance.new("UIListLayout", EggListContainer)
+    EggListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    EggListLayout.Padding = UDim.new(0, 2)
+
+    local EggListCorner = Instance.new("UICorner", EggListContainer)
+    EggListCorner.CornerRadius = UDim.new(0, 4)
+
+    local PetListContainer = Instance.new("ScrollingFrame")
+    PetListContainer.Size = UDim2.new(0.48, -4, 0, 48)
+    PetListContainer.Position = UDim2.new(0.52, 2, 1, -82)
+    PetListContainer.BackgroundColor3 = Color3.fromRGB(24, 24, 38)
+    PetListContainer.BackgroundTransparency = 0.3
+    PetListContainer.ScrollBarThickness = 2
+    PetListContainer.Parent = PreviewContainer
+
+    local PetListLayout = Instance.new("UIListLayout", PetListContainer)
+    PetListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    PetListLayout.Padding = UDim.new(0, 2)
+
+    local PetListCorner = Instance.new("UICorner", PetListContainer)
+    PetListCorner.CornerRadius = UDim.new(0, 4)
+
+    local ScanBtn = Instance.new("TextButton")
+    ScanBtn.Size = UDim2.new(0.96, 0, 0, 26)
+    ScanBtn.Position = UDim2.new(0.02, 0, 1, -30)
+    ScanBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 55)
+    ScanBtn.Text = "🔍 Quét Egg Theo Bộ Lọc"
+    ScanBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    ScanBtn.Font = Enum.Font.GothamMedium
+    ScanBtn.TextSize = 10
+    ScanBtn.Parent = PreviewContainer
+
+    local BtnCorner = Instance.new("UICorner", ScanBtn)
+    BtnCorner.CornerRadius = UDim.new(0, 5)
+
+    local PreviewRotationConnection = nil
+
+    local function CleanupPreview()
+        if PreviewRotationConnection then
+            PreviewRotationConnection:Disconnect()
+            PreviewRotationConnection = nil
+        end
+        for _, child in pairs(WorldModel:GetChildren()) do
+            child:Destroy()
+        end
+    end
+
+    local function LoadPetIntoPreview(petModel)
+        CleanupPreview()
+        pcall(function()
+            if petModel and petModel:IsA("Model") then
+                local clonedModel = petModel:Clone()
+                for _, desc in pairs(clonedModel:GetDescendants()) do
+                    if desc:IsA("Script") or desc:IsA("LocalScript") then
+                        desc:Destroy()
+                    end
+                end
+                clonedModel.Parent = WorldModel
+
+                local cf, size = clonedModel:GetBoundingBox()
+                local maxDim = math.max(size.X, size.Y, size.Z)
+                if maxDim <= 0 then maxDim = 5 end
+                local camDist = maxDim * 2.2
+                
+                Camera.CFrame = CFrame.new(cf.Position + Vector3.new(0, maxDim * 0.3, camDist), cf.Position)
+                
+                local currentAngle = 0
+                PreviewRotationConnection = RunService.RenderStepped:Connect(function(dt)
+                    pcall(function()
+                        if clonedModel and clonedModel.Parent then
+                            currentAngle = currentAngle + (dt * 45)
+                            local pivot = clonedModel:GetPivot()
+                            local currentPos = pivot.Position
+                            clonedModel:PivotTo(CFrame.new(currentPos) * CFrame.Angles(0, math.rad(currentAngle), 0))
+                        else
+                            CleanupPreview()
+                        end
+                    end)
+                end)
+            end
+        end)
+    end
+
+    local function GetPetsForEgg(eggInstance)
+        local petsList = {}
+        pcall(function()
+            if not eggInstance or not eggInstance:IsA("Model") then return end
+
+            local function validateAndAdd(model)
+                if not model or not model:IsA("Model") then return end
+                local n = model.Name:lower()
+                if n:find("vfx") or n:find("effect") or n:find("decoration") or n:find("display") or n:find("dummy") or n:find("shell") or n:find("particle") then
+                    return
+                end
+                if model:FindFirstChildWhichIsA("BasePart", true) then
+                    if not table.find(petsList, model) then
+                        table.insert(petsList, model)
+                    end
+                end
+            end
+
+            for _, child in pairs(eggInstance:GetChildren()) do
+                if child:IsA("Model") and child ~= eggInstance then
+                    validateAndAdd(child)
+                elseif child:IsA("Folder") then
+                    for _, subChild in pairs(child:GetChildren()) do
+                        if subChild:IsA("Model") then
+                            validateAndAdd(subChild)
+                        end
+                    end
+                end
+            end
+        end)
+        return petsList
+    end
+
+    local function MatchEggFilter(eggObj)
+        local success, result = pcall(function()
+            local nameLower = eggObj.Name:lower()
+
+            if FilterConfig.SelectedMap ~= "Tất cả Map" then
+                local mapKey = FilterConfig.SelectedMap:lower():gsub("map ", "")
+                if not nameLower:find(mapKey) and not (eggObj.Parent and eggObj.Parent.Name:lower():find(mapKey)) then
+                    return false
+                end
+            end
+
+            if FilterConfig.FilterMutation then
+                if not nameLower:find("mut") and not nameLower:find("mutation") and not eggObj:FindFirstChild("Mutation") then
+                    return false
+                end
+            end
+
+            if FilterConfig.FilterHuge then
+                if not nameLower:find("huge") and not eggObj:FindFirstChild("Huge") then
+                    return false
+                end
+            end
+
+            if FilterConfig.SelectedCategory ~= "Tất cả" then
+                local catKey = FilterConfig.SelectedCategory:lower()
+                if catKey:find("thường") and (nameLower:find("special") or nameLower:find("event")) then return false end
+                if catKey:find("đặc biệt") and not nameLower:find("special") then return false end
+                if catKey:find("sự kiện") and not nameLower:find("event") then return false end
+                if catKey:find("boss") and not nameLower:find("boss") then return false end
+            end
+
+            return true
+        end)
+        if success then return result else return true end
+    end
+
+    ScanBtn.MouseButton1Click:Connect(function()
+        pcall(function()
+            for _, child in pairs(EggListContainer:GetChildren()) do
+                if child:IsA("TextButton") then child:Destroy() end
+            end
+            for _, child in pairs(PetListContainer:GetChildren()) do
+                if child:IsA("TextButton") then child:Destroy() end
+            end
+
+            CleanupPreview()
+            SelectedEggInstance = nil
+            SelectedPetModel = nil
+            StatusLabel.Text = "  Trạng thái: Đang quét theo bộ lọc..."
+
+            local foundEggs = {}
+            for _, obj in pairs(workspace:GetDescendants()) do
+                pcall(function()
+                    if obj:IsA("Model") and (obj.Name:lower().find("egg") or obj:FindFirstChild("PetInside")) then
+                        if MatchEggFilter(obj) then
+                            if not table.find(foundEggs, obj) then
+                                table.insert(foundEggs, obj)
+                            end
+                        end
+                    end
+                end)
+            end
+
+            if #foundEggs == 0 then
+                StatusLabel.Text = "  Trạng thái: Không tìm thấy Egg khớp với bộ lọc"
+                return
+            end
+
+            StatusLabel.Text = "  Trạng thái: Tìm thấy " .. #foundEggs .. " Egg phù hợp. Chọn Egg:"
+
+            for _, egg in pairs(foundEggs) do
+                local eggBtn = Instance.new("TextButton")
+                eggBtn.Size = UDim2.new(1, -4, 0, 22)
+                eggBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 55)
+                eggBtn.Text = "Egg: " .. egg.Name
+                eggBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+                eggBtn.Font = Enum.Font.Gotham
+                eggBtn.TextSize = 9
+                eggBtn.Parent = EggListContainer
+
+                local btnCorner = Instance.new("UICorner", eggBtn)
+                btnCorner.CornerRadius = UDim.new(0, 3)
+
+                eggBtn.MouseButton1Click:Connect(function()
+                    SelectedEggInstance = egg
+                    SelectedPetModel = nil
+                    StatusLabel.Text = "  Trạng thái: Đã chọn Egg. Chọn Pet bên cạnh:"
+
+                    for _, subChild in pairs(PetListContainer:GetChildren()) do
+                        if subChild:IsA("TextButton") then subChild:Destroy() end
+                    end
+                    CleanupPreview()
+
+                    local possiblePets = GetPetsForEgg(egg)
+                    if #possiblePets == 0 then
+                        StatusLabel.Text = "  Trạng thái: Không tìm thấy Pet hợp lệ"
+                        return
+                    end
+
+                    for _, petModel in pairs(possiblePets) do
+                        local petBtn = Instance.new("TextButton")
+                        petBtn.Size = UDim2.new(1, -4, 0, 22)
+                        petBtn.BackgroundColor3 = Color3.fromRGB(45, 35, 65)
+                        petBtn.Text = "Pet: " .. petModel.Name
+                        petBtn.TextColor3 = Color3.fromRGB(255, 220, 240)
+                        petBtn.Font = Enum.Font.Gotham
+                        petBtn.TextSize = 9
+                        petBtn.Parent = PetListContainer
+
+                        local pCorner = Instance.new("UICorner", petBtn)
+                        pCorner.CornerRadius = UDim.new(0, 3)
+
+                        petBtn.MouseButton1Click:Connect(function()
+                            SelectedPetModel = petModel
+                            LoadPetIntoPreview(petModel)
+                            StatusLabel.Text = "  Trạng thái: Đã chọn Pet [" .. petModel.Name .. "] thành công!"
+                        end)
+                    end
+                end)
+            end
+        end)
+    end)
+
+    PreviewContainer.Destroying:Connect(function()
+        CleanupPreview()
+    end)
+end
+
+task.spawn(function()
+    task.wait(0.3)
+    if Pages["Trộm Trứng"] and Pages["Trộm Trứng"].View then
+        Create3DPreviewTab(Pages["Trộm Trứng"].View)
+    end
+end)
+
+-- ----------------------------------------------------
+-- EGG SELECT -> FLY -> COLLECT -> SPAWN CORE
+-- ----------------------------------------------------
+SelectedEggInstance = nil
+SelectedPetModel = nil
+local CollectAttempted = false
+local ReturnSpawnPosition = nil
+
+local function GetEggTargetPosition(egg)
+    if not egg or not egg.Parent then return nil end
+    local success, pos = pcall(function()
+        if egg:IsA("Model") then
+            if egg.PrimaryPart then
+                return egg.PrimaryPart.Position
+            end
+            local okPivot, pivotCF = pcall(function() return egg:GetPivot() end)
+            if okPivot and pivotCF then
+                return pivotCF.Position
+            end
+            local okBox, boxCF, _ = pcall(function() return egg:GetBoundingBox() end)
+            if okBox and boxCF then
+                return boxCF.Position
+            end
+            for _, desc in pairs(egg:GetDescendants()) do
+                if desc:IsA("BasePart") then
+                    local n = desc.Name:lower()
+                    if not n:find("vfx") and not n:find("particle") and not n:find("effect") and not n:find("decoration") then
+                        return desc.Position
+                    end
+                end
+            end
+            local anyPart = egg:FindFirstChildWhichIsA("BasePart", true)
+            if anyPart then return anyPart.Position end
+        elseif egg:IsA("BasePart") then
+            return egg.Position
+        end
+        return nil
+    end)
+    if success then return pos else return nil end
+end
+
+local function GetPlayerSpawnPosition()
+    local success, pos = pcall(function()
+        for _, obj in pairs(workspace:GetDescendants()) do
+            if obj:IsA("SpawnLocation") then
+                if obj.TeamColor == LocalPlayer.TeamColor then
+                    return obj.Position + Vector3.new(0, 3, 0)
+                end
+            end
+        end
+        for _, obj in pairs(workspace:GetDescendants()) do
+            if obj:IsA("SpawnLocation") then
+                if obj.Neutral then
+                    return obj.Position + Vector3.new(0, 3, 0)
+                end
+            end
+        end
+        for _, obj in pairs(workspace:GetDescendants()) do
+            if obj:IsA("SpawnLocation") then
+                return obj.Position + Vector3.new(0, 3, 0)
+            end
+        end
+        return nil
+    end)
+    if success then return pos else return nil end
+end
+
+local function StopFly()
+    pcall(function()
+        if FlyConnection then
+            FlyConnection:Disconnect()
+            FlyConnection = nil
+        end
+        if FlyVelocity then
+            FlyVelocity:Destroy()
+            FlyVelocity = nil
+        end
+        if FlyGyro then
+            FlyGyro:Destroy()
+            FlyGyro = nil
+        end
+        if Humanoid then
+            Humanoid.PlatformStand = false
+        end
+    end)
+end
+
+local function StartFly()
+    if FlyConnection then return end
+    
+    local flyStartTime = tick()
+    local currentTaskState = "FreeFly"
+
+    if State.FlyToSelectedEgg then
+        currentTaskState = "FlyToEgg"
+        CollectAttempted = false
+    elseif State.ReturnToSpawn then
+        currentTaskState = "ReturnToSpawn"
+    elseif State.TrueFly then
+        currentTaskState = "FreeFly"
+    end
+
+    FlyConnection = RunService.RenderStepped:Connect(function()
+        pcall(function()
+            if not State.TrueFly and not State.FlyToSelectedEgg and not State.ReturnToSpawn then
+                StopFly()
+                State.FlyToSelectedEgg = false
+                State.ReturnToSpawn = false
+                State.TrueFly = false
+                CollectAttempted = false
+                ReturnSpawnPosition = nil
+                return
+            end
+
+            if not Character or not Humanoid or not RootPart or Humanoid.Health <= 0 then
+                return
+            end
+
+            Humanoid.PlatformStand = true
+
+            if not FlyVelocity or not FlyVelocity.Parent then
+                FlyVelocity = Instance.new("BodyVelocity")
+                FlyVelocity.Name = "FlyVelocity"
+                FlyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                FlyVelocity.Velocity = Vector3.new(0, 0, 0)
+                FlyVelocity.Parent = RootPart
+            end
+
+            if not FlyGyro or not FlyGyro.Parent then
+                FlyGyro = Instance.new("BodyGyro")
+                FlyGyro.Name = "FlyGyro"
+                FlyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+                FlyGyro.CFrame = RootPart.CFrame
+                FlyGyro.Parent = RootPart
+            end
+
+            local camera = workspace.CurrentCamera
+
+            if currentTaskState == "FlyToEgg" or currentTaskState == "ReturnToSpawn" then
+                if tick() - flyStartTime > 15 then
+                    StopFly()
+                    State.FlyToSelectedEgg = false
+                    State.ReturnToSpawn = false
+                    State.TrueFly = false
+                    CollectAttempted = false
+                    ReturnSpawnPosition = nil
+                    return
+                end
+            end
+
+            if currentTaskState == "FlyToEgg" then
+                if not SelectedEggInstance or not SelectedEggInstance.Parent then
+                    StopFly()
+                    State.FlyToSelectedEgg = false
+                    State.ReturnToSpawn = false
+                    State.TrueFly = false
+                    CollectAttempted = false
+                    ReturnSpawnPosition = nil
+                    return
+                end
+
+                local targetPos = GetEggTargetPosition(SelectedEggInstance)
+                if not targetPos then
+                    StopFly()
+                    State.FlyToSelectedEgg = false
+                    State.ReturnToSpawn = false
+                    State.TrueFly = false
+                    CollectAttempted = false
+                    ReturnSpawnPosition = nil
+                    return
+                end
+
+                local dir = (targetPos - RootPart.Position)
+                if dir.Magnitude > 6 then
+                    FlyVelocity.Velocity = dir.Unit * State.FlySpeed
+                    FlyGyro.CFrame = camera.CFrame
+                else
+                    FlyVelocity.Velocity = Vector3.zero
+
+                    if not CollectAttempted then
+                        CollectAttempted = true
+
+                        local successCall, apiSuccess, apiMsg = pcall(function()
+                            return GameAPI.CollectSelectedEgg(SelectedEggInstance)
+                        end)
+
+                        if not successCall or apiSuccess == false then
+                            StopFly()
+                            State.FlyToSelectedEgg = false
+                            State.ReturnToSpawn = false
+                            State.TrueFly = false
+                            CollectAttempted = false
+                            ReturnSpawnPosition = nil
+                            return
+                        else
+                            ReturnSpawnPosition = GetPlayerSpawnPosition()
+                            if not ReturnSpawnPosition then
+                                StopFly()
+                                State.FlyToSelectedEgg = false
+                                State.ReturnToSpawn = false
+                                State.TrueFly = false
+                                CollectAttempted = false
+                                ReturnSpawnPosition = nil
+                                return
+                            end
+
+                            State.FlyToSelectedEgg = false
+                            State.ReturnToSpawn = true
+                            currentTaskState = "ReturnToSpawn"
+                            flyStartTime = tick()
+                        end
+                    end
+                end
+
+            elseif currentTaskState == "ReturnToSpawn" then
+                if not ReturnSpawnPosition then
+                    ReturnSpawnPosition = GetPlayerSpawnPosition()
+                end
+
+                if not ReturnSpawnPosition then
+                    StopFly()
+                    State.FlyToSelectedEgg = false
+                    State.ReturnToSpawn = false
+                    State.TrueFly = false
+                    CollectAttempted = false
+                    ReturnSpawnPosition = nil
+                    return
+                end
+
+                local dir = (ReturnSpawnPosition - RootPart.Position)
+                if dir.Magnitude > 5 then
+                    FlyVelocity.Velocity = dir.Unit * State.FlySpeed
+                    FlyGyro.CFrame = camera.CFrame
+                else
+                    StopFly()
+                    State.FlyToSelectedEgg = false
+                    State.ReturnToSpawn = false
+                    State.TrueFly = false
+                    CollectAttempted = false
+                    ReturnSpawnPosition = nil
+                end
+
+            elseif currentTaskState == "FreeFly" then
+                local moveDir = Humanoid.MoveDirection
+                local velocity = Vector3.zero
+
+                if moveDir.Magnitude > 0 then
+                    velocity = moveDir * State.FlySpeed
+                end
+
+                if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+                    velocity = velocity + Vector3.new(0, State.FlySpeed, 0)
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) or UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+                    velocity = velocity - Vector3.new(0, State.FlySpeed, 0)
+                end
+
+                FlyVelocity.Velocity = velocity
+                FlyGyro.CFrame = camera.CFrame
+            end
+        end)
+    end)
+end
+
+if WalkSpeedConnection then
+    WalkSpeedConnection:Disconnect()
+    WalkSpeedConnection = nil
+end
+
+WalkSpeedConnection = RunService.Heartbeat:Connect(function()
+    pcall(function()
+        if Humanoid and not State.TrueFly then
+            if Humanoid.WalkSpeed ~= State.WalkSpeedVal then
+                Humanoid.WalkSpeed = State.WalkSpeedVal
+            end
+        end
+    end)
+end)
+
+-- ----------------------------------------------------
+-- FEATURE LOGIC ENGINES
+-- ----------------------------------------------------
+RunService.Stepped:Connect(function()
+    pcall(function()
+        if State.AntiRagdoll and Humanoid then
+            local ragdollStates = {
+                Enum.HumanoidStateType.FallingDown,
+                Enum.HumanoidStateType.Ragdoll,
+                Enum.HumanoidStateType.PlatformStanding
+            }
+            for _, stateType in ipairs(ragdollStates) do
+                if Humanoid:GetState() == stateType then
+                    Humanoid:ChangeState(Enum.HumanoidStateType.Running)
+                end
+                Humanoid:SetStateEnabled(stateType, false)
+            end
+        elseif Humanoid then
+            Humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+            Humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+        end
+    end)
+end)
+
+task.spawn(function()
+    while true do
+        pcall(function()
+            if State.AntiTrap and RootPart then
+                for _, obj in pairs(workspace:GetDescendants()) do
+                    if obj:IsA("BasePart") then
+                        local nameLower = obj.Name:lower()
+                        if (nameLower:find("trap") or nameLower:find("mine") or nameLower:find("hazard")) then
+                            if (obj.Position - RootPart.Position).Magnitude < 10 then
+                                obj.CanCollide = false
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+        task.wait(0.2)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        pcall(function()
+            if State.AutoKingOfHill and RootPart then
+                for _, obj in pairs(workspace:GetDescendants()) do
+                    if obj:IsA("Model") and (obj.Name:lower().find("hill") or obj.Name:lower().find("zone") or obj.Name:lower().find("capture")) then
+                        local primary = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+                        if primary then
+                            RootPart.CFrame = primary.CFrame + Vector3.new(0, 3, 0)
+                            if GameAPI.KingOfHill and GameAPI.KingOfHill:IsA("RemoteEvent") then
+                                GameAPI.KingOfHill:FireServer(obj)
+                            end
+                            break
+                        end
+                    end
+                end
+            end
+        end)
+        task.wait(1)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        pcall(function()
+            if State.BatAura and RootPart then
+                for _, plr in pairs(Players:GetPlayers()) do
+                    if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                        local enemyRoot = plr.Character.HumanoidRootPart
+                        if (enemyRoot.Position - RootPart.Position).Magnitude <= 15 then
+                            if GameAPI.BatAttack and GameAPI.BatAttack:IsA("RemoteEvent") then
+                                GameAPI.BatAttack:FireServer(plr.Character)
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+        task.wait(0.15)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        pcall(function()
+            if State.AutoTreadmill and RootPart then
+                for _, obj in pairs(workspace:GetDescendants()) do
+                    if obj:IsA("Model") and (obj.Name:lower().find("treadmill") or obj.Name:lower().find("gym") or obj.Name:lower().find("machine")) then
+                        local primary = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+                        if primary and (primary.Position - RootPart.Position).Magnitude < 20 then
+                            RootPart.CFrame = primary.CFrame + Vector3.new(0, 2, 0)
+                            if GameAPI.Treadmill and GameAPI.Treadmill:IsA("RemoteEvent") then
+                                GameAPI.Treadmill:FireServer(obj)
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+        task.wait(0.5)
+    end
+end)
+
+-- ----------------------------------------------------
+-- UI BINDINGS
+-- ----------------------------------------------------
+AddToggle(TabSteal, "Gom Tất Cả Trứng Mutated & Huge", "AutoCollectMutHuge", function(v)
+    if v then
+        task.spawn(function()
+            while State.AutoCollectMutHuge do
+                pcall(function()
+                    if GameAPI.CollectAllMutatedHuge then
+                        GameAPI.CollectAllMutatedHuge()
+                    end
+                end)
+                task.wait(0.5)
+            end
+        end)
+    end
+end)
+
+AddToggle(TabSteal, "Tự Động Mở / Ấp Trứng", "AutoOpenEgg", function(v)
+    if v then
+        task.spawn(function()
+            while State.AutoOpenEgg do
+                pcall(function()
+                    if GameAPI.OpenEgg and GameAPI.OpenEgg:IsA("RemoteEvent") then
+                        GameAPI.OpenEgg:FireServer()
+                    end
+                end)
+                task.wait(1)
+            end
+        end)
+    end
+end)
+
+AddToggle(TabSteal, "Fly Tới Egg Đã Chọn", "FlyToSelectedEgg", function(v)
+    if v then
+        if not SelectedEggInstance or not SelectedEggInstance.Parent then
+            State.FlyToSelectedEgg = false
+            return
+        end
+        State.ReturnToSpawn = false
+        State.TrueFly = false
+        CollectAttempted = false
+        ReturnSpawnPosition = nil
+        StartFly()
+    else
+        State.FlyToSelectedEgg = false
+        State.ReturnToSpawn = false
+        State.TrueFly = false
+        CollectAttempted = false
+        ReturnSpawnPosition = nil
+        StopFly()
+    end
+end)
+
+AddToggle(TabSteal, "Tự Động Chiếm Trứng King of the Hill", "AutoKingOfHill", function(v)
+    State.AutoKingOfHill = v
+end)
+
+AddToggle(TabCombat, "Tự Động Săn Boss Rift", "AutoFarmBoss", function(v)
+    if v then
+        task.spawn(function()
+            while State.AutoFarmBoss do
+                pcall(function()
+                    if GameAPI.FarmBoss and GameAPI.FarmBoss:IsA("RemoteEvent") then
+                        GameAPI.FarmBoss:FireServer()
+                    end
+                end)
+                task.wait(0.5)
+            end
+        end)
+    end
+end)
+
+AddToggle(TabCombat, "Vung Gậy Đập Người (Bat Aura)", "BatAura", function(v)
+    State.BatAura = v
+end)
+
+AddToggle(TabFarm, "Cày Speed Trên Máy Tập", "AutoTreadmill", function(v)
+    State.AutoTreadmill = v
+end)
+
+AddToggle(TabFarm, "Tự Động Trùng Sinh", "AutoRebirth", function(v)
+    if v then
+        task.spawn(function()
+            while State.AutoRebirth do
+                pcall(function()
+                    if GameAPI.Rebirth and GameAPI.Rebirth:IsA("RemoteEvent") then
+                        GameAPI.Rebirth:FireServer()
+                    end
+                end)
+                task.wait(2)
+            end
+        end)
+    end
+end)
+
+AddToggle(TabFarm, "Tự Động Hút Tiền / Gem Rơi", "AutoCollectDrops", function(v)
+    if v then
+        task.spawn(function()
+            while State.AutoCollectDrops do
+                pcall(function()
+                    if GameAPI.CollectDrop and GameAPI.CollectDrop:IsA("RemoteEvent") then
+                        GameAPI.CollectDrop:FireServer()
+                    end
+                end)
+                task.wait(0.3)
+            end
+        end)
+    end
+end)
+
+AddToggle(TabMove, "Bật Bay Tự Do (True Fly)", "TrueFly", function(isActive)
+    if isActive then
+        State.FlyToSelectedEgg = false
+        State.ReturnToSpawn = false
+        CollectAttempted = false
+        ReturnSpawnPosition = nil
+        StartFly()
+    else
+        State.FlyToSelectedEgg = false
+        State.ReturnToSpawn = false
+        State.TrueFly = false
+        CollectAttempted = false
+        ReturnSpawnPosition = nil
+        StopFly()
+    end
+end)
+
+AddSlider(TabMove, "Tốc Độ Chạy (WalkSpeed)", 16, 500, 16, function(v)
+    State.WalkSpeedVal = v
+    if Humanoid and not State.TrueFly then
+        Humanoid.WalkSpeed = v
+    end
+end)
+
+AddSlider(TabMove, "Tốc Độ Bay (FlySpeed)", 20, 500, 65, function(v)
+    State.FlySpeed = v
+end)
+
+AddToggle(TabAnti, "Kháng Bẫy (Anti-Trap)", "AntiTrap", function(v)
+    State.AntiTrap = v
+end)
+
+AddToggle(TabAnti, "Kháng Té Ngã / Văng", "AntiRagdoll", function(v)
+    State.AntiRagdoll = v
+end)
+
+-- Respawn Listener
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+    StopFly()
+    UpdateCharacterReferences(newChar)
+    
+    State.FlyToSelectedEgg = false
+    State.ReturnToSpawn = false
+    CollectAttempted = false
+    ReturnSpawnPosition = nil
+
+    task.wait(0.5)
+    pcall(function()
+        if Humanoid then
+            Humanoid.WalkSpeed = State.WalkSpeedVal
+        end
+    end)
+
+    if State.TrueFly then
+        StartFly()
+    end
+end)
